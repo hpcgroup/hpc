@@ -98,8 +98,9 @@ def init(method, batchnorm_group_size=1):
         world_size = int(os.getenv("SLURM_NTASKS"))
         address = os.getenv("SLURM_LAUNCH_NODE_IPADDR")
         port = "29500"
-        os.environ["MASTER_ADDR"] = address
-        os.environ["MASTER_PORT"] = port
+        # MODIFIED: expected this is set before program run
+        # os.environ["MASTER_ADDR"] = address
+        # os.environ["MASTER_PORT"] = port
 
         #init DDP
         dist.init_process_group(backend = "nccl",

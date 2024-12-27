@@ -46,13 +46,24 @@ def train_epoch(pargs, comm_rank, comm_size,
     else:
         current_lr = pargs.start_lr
     
+    steps_in_epoch = 0
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
     # do the training loop
     for inputs, label, filename in train_loader:
+        start_event.record()
     
         # send to device
         inputs = inputs.to(device)
         label = label.to(device)
     
+        if os.environ.get("WITH_PROFILER") == "1" and step == 4:
+            print('profiling!')
+            prof = torch.profiler.profile(activities=[
+               torch.profiler.ProfilerActivity.CUDA, torch.profiler.ProfilerActivity.CPU
+            ])
+            prof.__enter__()
+
         # forward pass
         outputs = net.forward(inputs)
         loss = criterion(outputs, label) / float(pargs.gradient_accumulation_frequency)
@@ -70,8 +81,19 @@ def train_epoch(pargs, comm_rank, comm_size,
                 current_lr = scheduler.get_last_lr()[0]
                 scheduler.step()
     
+        if os.environ.get("WITH_PROFILER") == "1" and step == 8:
+            print("exiting profiler")
+            prof.__exit__(None, None, None)
+
         # increase step counter
         step += 1
+        steps_in_epoch += 1
+
+        end_event.record()
+        torch.cuda.synchronize()
+        dt = start_event.elapsed_time(end_event)
+        if torch.distributed.get_rank() == 0:
+            print(f"step {step}: time {dt:.2f}ms")
         
         #log if requested
         if (pargs.logging_frequency > 0) and (step % pargs.logging_frequency == 0):
@@ -94,6 +116,21 @@ def train_epoch(pargs, comm_rank, comm_size,
             logger.log_event(key = "learning_rate", value = current_lr, metadata = {'epoch_num': epoch+1, 'step_num': step})
             logger.log_event(key = "train_accuracy", value = iou_avg_train, metadata = {'epoch_num': epoch+1, 'step_num': step})
             logger.log_event(key = "train_loss", value = loss_avg_train, metadata = {'epoch_num': epoch+1, 'step_num': step})
+
+
+    if os.environ.get("WITH_PROFILER") == "1" and steps_in_epoch == step:
+        print("dumping profiler data")
+        slurm_job_name = os.getenv("SLURM_JOB_NAME")
+        slurm_job_id = os.getenv("SLURM_JOB_ID")
+        output_dir = os.getenv("JOB_OUTPUT_PATH")
+        profiler_output_dir = os.path.join(output_dir, "torchprof")
+        if comm_rank == 0 and not os.path.exists(profiler_output_dir):
+            os.makedirs(profiler_output_dir)
+        
+        torch.distributed.barrier()
+        trace_file = os.path.join(profiler_output_dir, f"{slurm_job_name}-{slurm_job_id}-{comm_rank}-profiler.json")
+        print("logging traces from rank", comm_rank)
+        prof.export_chrome_trace(trace_file)
 
     # end of epoch logging
     # allreduce for loss
