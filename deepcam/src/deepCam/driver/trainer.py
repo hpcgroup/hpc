@@ -58,7 +58,6 @@ def train_epoch(pargs, comm_rank, comm_size,
         label = label.to(device)
     
         if os.environ.get("WITH_PROFILER") == "1" and step == 4:
-            print('profiling!')
             prof = torch.profiler.profile(activities=[
                torch.profiler.ProfilerActivity.CUDA, torch.profiler.ProfilerActivity.CPU
             ])
@@ -82,7 +81,6 @@ def train_epoch(pargs, comm_rank, comm_size,
                 scheduler.step()
     
         if os.environ.get("WITH_PROFILER") == "1" and step == 8:
-            print("exiting profiler")
             prof.__exit__(None, None, None)
 
         # increase step counter
@@ -119,7 +117,6 @@ def train_epoch(pargs, comm_rank, comm_size,
 
 
     if os.environ.get("WITH_PROFILER") == "1" and steps_in_epoch == step:
-        print("dumping profiler data")
         slurm_job_name = os.getenv("SLURM_JOB_NAME")
         slurm_job_id = os.getenv("SLURM_JOB_ID")
         output_dir = os.getenv("JOB_OUTPUT_PATH")
