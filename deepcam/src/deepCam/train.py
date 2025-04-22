@@ -20,8 +20,14 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-# Basics
 import os
+if os.environ.get("WITH_PERFORMANCE_COUNTERS") == "1":
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    print(f"Hello from process {rank}")
+
+# Basics
 import numpy as np
 import datetime as dt
 import subprocess as sp
